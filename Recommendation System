@@ -1,0 +1,142 @@
+import pandas as pd
+import random
+import requests
+import os
+
+# Spotify API credentials
+SPOTIFY_CLIENT_ID = "aaec86702bff4ab8b7963e1882d0f4dd"
+SPOTIFY_CLIENT_SECRET = "7ca5aa3cb8c6470e9816cd2fc7da87e6"
+
+# Recommendations for each FER emotion
+movie_recommendations = {
+    "angry": [
+        {"title": "Gladiator", "imdb_link": "https://www.imdb.com/title/tt0172495/"},
+        {"title": "The Dark Knight", "imdb_link": "https://www.imdb.com/title/tt0468569/"},
+        {"title": "Fight Club", "imdb_link": "https://www.imdb.com/title/tt0137523/"},
+        {"title": "Joker", "imdb_link": "https://www.imdb.com/title/tt7286456/"},
+        {"title": "V for Vendetta", "imdb_link": "https://www.imdb.com/title/tt0434409/"}
+    ],
+    "disgust": [
+        {"title": "Requiem for a Dream", "imdb_link": "https://www.imdb.com/title/tt0180093/"},
+        {"title": "American History X", "imdb_link": "https://www.imdb.com/title/tt0120586/"},
+        {"title": "Trainspotting", "imdb_link": "https://www.imdb.com/title/tt0117951/"},
+        {"title": "The Fly", "imdb_link": "https://www.imdb.com/title/tt0091064/"},
+        {"title": "Se7en", "imdb_link": "https://www.imdb.com/title/tt0114369/"}
+    ],
+    "fear": [
+        {"title": "Psycho", "imdb_link": "https://www.imdb.com/title/tt0054215/"},
+        {"title": "Get Out", "imdb_link": "https://www.imdb.com/title/tt5052448/"},
+        {"title": "A Quiet Place", "imdb_link": "https://www.imdb.com/title/tt6644200/"},
+        {"title": "Hereditary", "imdb_link": "https://www.imdb.com/title/tt7784604/"},
+        {"title": "The Shining", "imdb_link": "https://www.imdb.com/title/tt0081505/"}
+    ],
+    "happy": [
+        {"title": "The Pursuit of Happyness", "imdb_link": "https://www.imdb.com/title/tt0454921/"},
+        {"title": "Forrest Gump", "imdb_link": "https://www.imdb.com/title/tt0109830/"},
+        {"title": "La La Land", "imdb_link": "https://www.imdb.com/title/tt3783958/"},
+        {"title": "Up", "imdb_link": "https://www.imdb.com/title/tt1049413/"},
+        {"title": "Inside Out", "imdb_link": "https://www.imdb.com/title/tt2096673/"}
+    ],
+    "sad": [
+        {"title": "The Green Mile", "imdb_link": "https://www.imdb.com/title/tt0120689/"},
+        {"title": "A Beautiful Mind", "imdb_link": "https://www.imdb.com/title/tt0268978/"},
+        {"title": "Manchester by the Sea", "imdb_link": "https://www.imdb.com/title/tt4034228/"},
+        {"title": "Schindler's List", "imdb_link": "https://www.imdb.com/title/tt0108052/"},
+        {"title": "The Fault in Our Stars", "imdb_link": "https://www.imdb.com/title/tt2582846/"}
+    ],
+    "surprise": [
+        {"title": "Inception", "imdb_link": "https://www.imdb.com/title/tt1375666/"},
+        {"title": "The Sixth Sense", "imdb_link": "https://www.imdb.com/title/tt0167404/"},
+        {"title": "Fight Club", "imdb_link": "https://www.imdb.com/title/tt0137523/"},
+        {"title": "Shutter Island", "imdb_link": "https://www.imdb.com/title/tt1130884/"},
+        {"title": "The Prestige", "imdb_link": "https://www.imdb.com/title/tt0482571/"}
+    ],
+    "neutral": [
+        {"title": "The Secret Life of Walter Mitty", "imdb_link": "https://www.imdb.com/title/tt0359950/"},
+        {"title": "Into the Wild", "imdb_link": "https://www.imdb.com/title/tt0758758/"},
+        {"title": "Forrest Gump", "imdb_link": "https://www.imdb.com/title/tt0109830/"},
+        {"title": "Cast Away", "imdb_link": "https://www.imdb.com/title/tt0162222/"},
+        {"title": "The Way", "imdb_link": "https://www.imdb.com/title/tt1441912/"}
+    ]
+}
+
+def get_spotify_token():
+    """Request an access token from Spotify."""
+    auth_url = 'https://accounts.spotify.com/api/token'
+    auth_response = requests.post(auth_url, {
+        'grant_type': 'client_credentials',
+        'client_id': SPOTIFY_CLIENT_ID,
+        'client_secret': SPOTIFY_CLIENT_SECRET,
+    })
+
+    if auth_response.status_code == 200:
+        return auth_response.json()['access_token']
+    else:
+        print("Failed to get Spotify token.")
+        return None
+
+def get_spotify_recommendations(emotion, token, genre="pop"):
+    """Fetch 5 Spotify track recommendations based on mood and genre."""
+    recommendation_url = 'https://api.spotify.com/v1/recommendations'
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+    params = {
+        "limit": 5,
+        "seed_genres": genre,
+        "target_valence": 0.8 if emotion == "happy" else 0.2 if emotion in ["sad", "fear"] else 0.5,
+    }
+    response = requests.get(recommendation_url, headers=headers, params=params)
+
+    if response.status_code == 200:
+        tracks = response.json()['tracks']
+        return [{"title": track['name'], "link": track['external_urls']['spotify']} for track in tracks]
+    else:
+        print("Failed to get Spotify recommendations.")
+        return []
+
+def get_latest_emotion(filename):
+    """Reads the last confirmed emotion from the CSV file."""
+    if not os.path.exists(filename):
+        print("Emotion log file not found.")
+        return None
+
+    df = pd.read_csv(filename)
+    if df.empty:
+        print("No emotions logged in the file.")
+        return None
+
+    # Get the last logged emotion
+    return df['Emotion'].iloc[-1]
+
+def suggest_recommendations(emotion):
+    """Provide movie and music recommendations based on the emotion."""
+    if emotion not in movie_recommendations:
+        print("No recommendations available for this emotion.")
+        return
+
+    # Movie recommendations
+    print("Movie Recommendations:")
+    for movie in movie_recommendations[emotion]:
+        print(f"{movie['title']} - IMDb: {movie['imdb_link']}")
+
+    # Spotify music recommendations
+    token = get_spotify_token()
+    if token:
+        print("\nMusic Recommendations:")
+        spotify_tracks = get_spotify_recommendations(emotion, token)
+        for track in spotify_tracks:
+            print(f"{track['title']} - Listen here: {track['link']}")
+
+# User-specific CSV file to locate
+user_id = input("Enter your user ID or name: ").strip()
+filename = f"{user_id}_emotion_log.csv"
+
+# Fetch the latest emotion and provide recommendations
+latest_emotion = get_latest_emotion(filename)
+
+if latest_emotion:
+    print(f"Latest detected emotion: {latest_emotion}")
+    suggest_recommendations(latest_emotion)
+else:
+    print("No emotions detected for recommendations.")
